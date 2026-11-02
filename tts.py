@@ -1,21 +1,31 @@
+
 import os
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+
 API_KEY = os.getenv("GNANI_API_KEY")
 TTS_URL = "https://api.vachana.ai/api/v1/tts/inference"
 
-# If timbre-v3.0 gives an error, switch to: MODEL = "timbre-v2.5" and VOICE = "Nalini"
 MODEL = "timbre-v3.0"
 VOICE = "Shivani"
 
 
 def speak(text, language="auto", voice=VOICE, model=MODEL):
-    """Turns text into speech. Returns WAV audio as bytes."""
+    """Convert text into speech using the Gnani TTS API."""
+
+    if not API_KEY:
+        raise RuntimeError(
+            "GNANI_API_KEY is missing. Please check your .env file."
+        )
+
     response = requests.post(
         TTS_URL,
-        headers={"Content-Type": "application/json", "X-API-Key-ID": API_KEY},
+        headers={
+            "Content-Type": "application/json",
+            "X-API-Key-ID": API_KEY,
+        },
         json={
             "text": text,
             "voice": voice,
@@ -32,13 +42,28 @@ def speak(text, language="auto", voice=VOICE, model=MODEL):
         },
         timeout=60,
     )
+
     if response.status_code != 200:
-        raise RuntimeError(f"TTS error {response.status_code}: {response.text}")
+        raise RuntimeError(
+            f"TTS error {response.status_code}: {response.text}"
+        )
+
     return response.content
 
 
 if __name__ == "__main__":
-    audio = speak("నమస్కారం, మీరు ఎలా ఉన్నారు? నేను మీ మాట వినడానికి ఇక్కడ ఉన్నాను.", language="te-IN")
-    with open("hello.wav", "wb") as f:
-        f.write(audio)
-    print("Saved hello.wav")
+    text = "నమస్కారం, మీరు ఎలా ఉన్నారు? నేను మీ మాట వినడానికి ఇక్కడ ఉన్నాను."
+
+    try:
+        audio = speak(text, language="te-IN")
+
+        output_file = "tts_test.wav"
+
+        with open(output_file, "wb") as file:
+            file.write(audio)
+
+        print(f"Speech generated successfully: {output_file}")
+        print(f"Audio size: {len(audio)} bytes")
+
+    except Exception as error:
+        print(f"Speech generation failed: {error}")

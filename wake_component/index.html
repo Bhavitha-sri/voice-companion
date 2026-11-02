@@ -1,0 +1,171 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    color: #333;
+    padding: 10px;
+}
+button {
+    padding: 10px 16px;
+    margin: 4px;
+    border: 0;
+    border-radius: 10px;
+    background: #6a4cff;
+    color: white;
+    cursor: pointer;
+}
+#status {
+    margin: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    background: #eeeaff;
+}
+</style>
+</head>
+<body>
+<h3>🎙️ Bhavi Voice Companion</h3>
+<div id="status">Ready to start voice activation.</div>
+<button id="start">Start voice activation</button>
+<button id="stop">Stop listening</button>
+
+<script>
+const statusBox = document.getElementById("status");
+const startButton = document.getElementById("start");
+const stopButton = document.getElementById("stop");
+
+const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+let recognition;
+let enabled = false;
+let waitingForCommand = false;
+let restartTimer = null;
+let lastSent = "";
+
+function sendToStreamlit(value) {
+    window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setComponentValue",
+        value: value
+    }, "*");
+}
+
+function setStatus(message) {
+    statusBox.textContent = message;
+}
+
+function startRecognition() {
+    if (!enabled || !recognition) return;
+    try {
+        recognition.start();
+    } catch (error) {
+        // Recognition may already be running.
+    }
+}
+
+if (!SpeechRecognition) {
+    setStatus("Speech recognition is unavailable. Try Chrome or Edge.");
+    startButton.disabled = true;
+} else {
+    recognition = new SpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+        setStatus("Listening for Bhavi or Hey Bhavi...");
+    };
+
+    recognition.onresult = (event) => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (!event.results[i].isFinal) continue;
+
+            const spoken = event.results[i][0].transcript.trim();
+            const match = spoken.match(/\b(?:hey\s+)?bhavi\b[\s,.:;!-]*(.*)/i);
+
+            if (waitingForCommand) {
+                if (spoken) {
+                    sendCommand(spoken);
+                }
+                continue;
+            }
+
+            if (match) {
+                const command = (match[1] || "").trim();
+
+                if (command) {
+                    sendCommand(command);
+                } else {
+                    waitingForCommand = true;
+                    setStatus("Yes, I'm listening. Say your request.");
+                }
+            }
+        }
+    };
+
+    function sendCommand(command) {
+        const clean = command.trim();
+        if (!clean || clean === lastSent) return;
+
+        lastSent = clean;
+        waitingForCommand = false;
+        setStatus("Sending your request: " + clean);
+
+        sendToStreamlit({
+            type: "BHAVI_COMMAND",
+            text: clean,
+            time: Date.now()
+        });
+    }
+
+    recognition.onerror = (event) => {
+        setStatus("Recognition status: " + event.error);
+    };
+
+    recognition.onend = () => {
+        if (enabled) {
+            clearTimeout(restartTimer);
+            restartTimer = setTimeout(startRecognition, 800);
+        }
+    };
+
+    startButton.onclick = () => {
+        enabled = true;
+        lastSent = "";
+        startRecognition();
+    };
+
+    stopButton.onclick = () => {
+        enabled = false;
+        waitingForCommand = false;
+        clearTimeout(restartTimer);
+        recognition.stop();
+        setStatus("Voice activation stopped.");
+    };
+}
+
+window.addEventListener("message", (event) => {
+    if (event.data && event.data.type === "streamlit:render") {
+        sendToStreamlit(null);
+    }
+});
+
+window.parent.postMessage({
+    isStreamlitMessage: true,
+    type: "streamlit:componentReady",
+    apiVersion: 1
+}, "*");
+
+window.parent.postMessage({
+    isStreamlitMessage: true,
+    type: "streamlit:setFrameHeight",
+    height: 210
+}, "*");
+</script>
+</body>
+</html>
